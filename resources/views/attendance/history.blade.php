@@ -2,21 +2,21 @@
     <x-slot name="header">
         <div class="flex justify-between items-center">
             <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                Attendance History
+                My Attendance History
             </h2>
-            <a href="{{ route('attendance.index') }}" 
-               class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">
-                Back to Dashboard
+            <a href="{{ route('attendance.clock') }}" 
+               class="bg-blue-900 hover:bg-blue-800 text-white font-bold py-2 px-4 rounded-lg">
+                Clock In/Out
             </a>
         </div>
     </x-slot>
 
     <div class="py-12 bg-gray-50">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <!-- Filter Section -->
+            <!-- Date Range Filter -->
             <div class="bg-white border border-gray-300 shadow-lg rounded-xl mb-6">
                 <div class="p-6">
-                    <h3 class="text-lg font-bold text-black mb-4">Filter Attendance Records</h3>
+                    <h3 class="text-lg font-bold text-black mb-4">Filter by Date Range</h3>
                     
                     <form method="GET" action="{{ route('attendance.history') }}" class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -47,55 +47,17 @@
                 </div>
             </div>
 
-            <!-- Summary Statistics -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div class="bg-white border border-gray-300 shadow-lg rounded-xl p-6">
-                    <h3 class="text-lg font-bold text-black mb-2">Total Days</h3>
-                    <div class="text-3xl font-bold text-blue-900">{{ $attendances->total() }}</div>
-                    <div class="text-sm text-gray-600">Attendance records</div>
-                </div>
-
-                <div class="bg-white border border-gray-300 shadow-lg rounded-xl p-6">
-                    <h3 class="text-lg font-bold text-black mb-2">Present Days</h3>
-                    <div class="text-3xl font-bold text-green-600">
-                        {{ $attendances->where('status', 'present')->count() }}
-                    </div>
-                    <div class="text-sm text-gray-600">Full attendance</div>
-                </div>
-
-                <div class="bg-white border border-gray-300 shadow-lg rounded-xl p-6">
-                    <h3 class="text-lg font-bold text-black mb-2">Late Days</h3>
-                    <div class="text-3xl font-bold text-yellow-600">
-                        {{ $attendances->where('status', 'late')->count() }}
-                    </div>
-                    <div class="text-sm text-gray-600">Late arrivals</div>
-                </div>
-
-                <div class="bg-white border border-gray-300 shadow-lg rounded-xl p-6">
-                    <h3 class="text-lg font-bold text-black mb-2">Total Hours</h3>
-                    <div class="text-3xl font-bold text-blue-900">
-                        {{ number_format($attendances->sum('total_hours'), 1) }}h
-                    </div>
-                    <div class="text-sm text-gray-600">Hours worked</div>
-                </div>
-            </div>
-
-            <!-- Attendance Records -->
+            <!-- Attendance History -->
             <div class="bg-white border border-gray-300 shadow-lg rounded-xl">
                 <div class="p-6">
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="text-xl font-bold text-black">
-                            Attendance Records 
-                            @if(request('start_date') && request('end_date'))
-                                ({{ Carbon\Carbon::parse(request('start_date'))->format('M d') }} - 
-                                 {{ Carbon\Carbon::parse(request('end_date'))->format('M d, Y') }})
-                            @endif
+                            My Attendance Records
                         </h3>
                         
-                        <!-- Export Button (Future Enhancement) -->
-                        <button class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg" disabled>
-                            Export to Excel
-                        </button>
+                        <div class="text-sm text-gray-600">
+                            Showing {{ $attendances->count() }} of {{ $attendances->total() }} records
+                        </div>
                     </div>
 
                     @if($attendances->count() > 0)
@@ -116,9 +78,6 @@
                                             Working Hours
                                         </th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
-                                            Overtime
-                                        </th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
                                             Status
                                         </th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-black uppercase tracking-wider">
@@ -133,7 +92,7 @@
                                                 <div class="text-sm font-medium text-black">
                                                     {{ $attendance->date->format('M d, Y') }}
                                                 </div>
-                                                <div class="text-sm text-gray-500">
+                                                <div class="text-xs text-gray-500">
                                                     {{ $attendance->date->format('l') }}
                                                 </div>
                                             </td>
@@ -150,21 +109,12 @@
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap">
                                                 <div class="text-sm font-medium text-black">
-                                                    {{ $attendance->working_hours_display ?? '-' }}
+                                                    {{ $attendance->total_hours ? number_format($attendance->total_hours, 2) . ' hours' : '-' }}
                                                 </div>
-                                                @if($attendance->total_hours)
-                                                    <div class="text-xs text-gray-500">
-                                                        {{ number_format($attendance->total_hours, 2) }} hours
-                                                    </div>
-                                                @endif
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-black">
                                                 @if($attendance->getOvertimeHours() > 0)
-                                                    <span class="text-blue-600 font-medium">
-                                                        +{{ $attendance->getOvertimeHours() }}h
-                                                    </span>
-                                                @else
-                                                    <span class="text-gray-400">-</span>
+                                                    <div class="text-xs text-blue-600">
+                                                        +{{ $attendance->getOvertimeHours() }}h OT
+                                                    </div>
                                                 @endif
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap">
@@ -229,35 +179,58 @@
         </div>
     </div>
 
-    <!-- Photo Modal (Future Enhancement) -->
-    <div id="photo-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-xl p-6 max-w-2xl mx-4">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-black">Attendance Photos</h3>
-                <button onclick="closePhotoModal()" class="text-gray-500 hover:text-gray-700">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            <div id="photo-content" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Photos will be loaded here -->
-            </div>
-        </div>
-    </div>
-
     <script>
         function viewPhotos(attendanceId) {
-            // Future: Load and display attendance photos
-            alert('Photo viewing feature will be implemented in the next phase.');
+            fetch(`/portal/public/attendance/${attendanceId}/photos`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let photoHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+                        
+                        if (data.clock_in_photo) {
+                            photoHtml += `
+                                <div class="text-center">
+                                    <h4 class="font-bold mb-2">Clock In Photo</h4>
+                                    <img src="/portal/public/storage/${data.clock_in_photo}" alt="Clock In" class="w-full h-48 object-cover rounded border">
+                                </div>
+                            `;
+                        }
+                        
+                        if (data.clock_out_photo) {
+                            photoHtml += `
+                                <div class="text-center">
+                                    <h4 class="font-bold mb-2">Clock Out Photo</h4>
+                                    <img src="/storage/${data.clock_out_photo}" alt="Clock Out" class="w-full h-48 object-cover rounded border">
+                                </div>
+                            `;
+                        }
+                        
+                        photoHtml += '</div>';
+                        
+                        const modal = document.createElement('div');
+                        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                        modal.innerHTML = `
+                            <div class="bg-white rounded-xl p-6 max-w-4xl mx-4">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-bold">My Attendance Photos</h3>
+                                    <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                                </div>
+                                ${photoHtml}
+                            </div>
+                        `;
+                        document.body.appendChild(modal);
+                    } else {
+                        alert('No photos found for this attendance record.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error loading photos');
+                });
         }
 
         function viewNotes(notes) {
             alert('Notes: ' + notes);
-        }
-
-        function closePhotoModal() {
-            document.getElementById('photo-modal').classList.add('hidden');
         }
     </script>
 </x-app-layout>

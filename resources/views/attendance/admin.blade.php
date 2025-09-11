@@ -313,8 +313,52 @@
         }
 
         function viewPhotos(attendanceId) {
-            // Future: Display attendance photos
-            alert('Photo viewing feature will be implemented in the next phase.');
-        }
+    fetch(`/portal/public/attendance/${attendanceId}/photos`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let photoHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+                
+                if (data.clock_in_photo) {
+                    photoHtml += `
+                        <div class="text-center">
+                            <h4 class="font-bold mb-2">Clock In Photo</h4>
+                            <img src="/portal/public/storage/${data.clock_in_photo}" alt="Clock In" class="w-full h-48 object-cover rounded border">
+                        </div>
+                    `;
+                }
+                
+                if (data.clock_out_photo) {
+                    photoHtml += `
+                        <div class="text-center">
+                            <h4 class="font-bold mb-2">Clock Out Photo</h4>
+                            <img src="/portal/public/storage/${data.clock_out_photo}" alt="Clock Out" class="w-full h-48 object-cover rounded border">
+                        </div>
+                    `;
+                }
+                
+                photoHtml += '</div>';
+                
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                modal.innerHTML = `
+                    <div class="bg-white rounded-xl p-6 max-w-4xl mx-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-bold">Attendance Photos</h3>
+                            <button onclick="this.closest('.fixed').remove()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                        </div>
+                        ${photoHtml}
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            } else {
+                alert('No photos found for this attendance record.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading photos');
+        });
+}
     </script>
 </x-app-layout>

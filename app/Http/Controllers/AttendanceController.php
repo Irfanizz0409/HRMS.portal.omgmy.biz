@@ -261,4 +261,88 @@ class AttendanceController extends Controller
         
         return Storage::disk('public')->response($path);
     }
+
+
+    /**
+ * Delete attendance record (Admin/HR only)
+ */
+public function destroy(Attendance $attendance)
+{
+    $user = Auth::user();
+    
+    // Check permissions
+    if (!in_array($user->role, ['admin', 'hr'])) {
+        abort(403, 'Unauthorized access.');
+    }
+    
+    // Delete associated photos if they exist
+    if ($attendance->clock_in_photo) {
+        Storage::disk('public')->delete($attendance->clock_in_photo);
+    }
+    
+    if ($attendance->clock_out_photo) {
+        Storage::disk('public')->delete($attendance->clock_out_photo);
+    }
+    
+    $attendance->delete();
+    
+    return redirect()->route('attendance.admin')
+        ->with('success', 'Attendance record deleted successfully.');
+}
+
+/**
+ * Admin update attendance record
+ */
+public function adminUpdate(Request $request, Attendance $attendance)
+{
+    $user = Auth::user();
+    
+    // Check permissions
+    if (!in_array($user->role, ['admin', 'hr'])) {
+        abort(403, 'Unauthorized access.');
+    }
+    
+    // Validate input
+    $request->validate([
+        'clock_in_time' => 'nullable|date_format:H:i',
+        'clock_out_time' => 'nullable|date_format:H:i',
+        'status' => 'required|in:present,late,absent,incomplete',
+        'notes' => 'nullable|string|max:500'
+    ]);
+    
+    // Update attendance record
+    $attendance->update([
+        'clock_in_time' => $request->clock_in_time,
+        'clock_out_time' => $request->clock_out_time,
+        'status' => $request->status,
+        'notes' => $request->notes
+    ]);
+    
+    // Recalculate total hours if both times are present
+    if ($attendance->clock_in_time && $attendance->clock_out_time) {
+        $attendance->calculateTotalHours();
+    }
+    
+    return redirect()->route('attendance.admin')
+                    ->with('success', 'Attendance record updated successfully.');
+}
+
+/**
+ * Get attendance photos for display
+ */
+public function getPhotos(Attendance $attendance)
+{
+    $user = Auth::user();
+    
+    // Check permissions - admin/hr can view all, employees can view their own
+    if (!in_array($user->role, ['admin', 'hr']) && $attendance->user_id !== $user->id) {
+        return response()->json(['success' => false, 'message' => 'Unauthorized']);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'clock_in_photo' => $attendance->clock_in_photo,
+        'clock_out_photo' => $attendance->clock_out_photo,
+    ]);
+}
 }

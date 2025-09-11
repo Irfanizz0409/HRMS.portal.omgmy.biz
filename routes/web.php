@@ -42,12 +42,14 @@ Route::middleware('auth')->group(function () {
     Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn'])->name('attendance.clock-in');
     Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut'])->name('attendance.clock-out');
     Route::get('/attendance/history', [AttendanceController::class, 'history'])->name('attendance.history');
+    Route::get('/attendance/{attendance}/photos', [AttendanceController::class, 'getPhotos'])->name('attendance.photos');
 
     // Admin/HR Attendance Management
     Route::get('/attendance/admin', [AttendanceController::class, 'adminIndex'])->name('attendance.admin');
     Route::delete('/attendance/{attendance}', [AttendanceController::class, 'destroy'])->name('attendance.destroy');
     Route::put('/attendance/{attendance}', [AttendanceController::class, 'adminUpdate'])->name('attendance.admin-update');
     Route::get('/attendance/photo/{filename}', [AttendanceController::class, 'showPhoto'])->name('attendance.photo');
+    Route::get('/attendance/{attendance}/photos', [AttendanceController::class, 'getPhotos'])->name('attendance.photos');
     
     // My Profile Route
     Route::get('/my-profile', [EmployeeController::class, 'myProfile'])->name('my-profile');
