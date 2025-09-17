@@ -22,7 +22,17 @@ return new class extends Migration
             $table->text('clock_in_location')->nullable(); // GPS coordinates
             $table->text('clock_out_location')->nullable();
             $table->decimal('total_hours', 5, 2)->nullable(); // Working hours
-            $table->enum('status', ['present', 'late', 'absent', 'incomplete'])->default('incomplete');
+            $table->enum('status', [
+                'safe',                 // Clocked in before 9:45 AM
+                'late',                 // Clocked in after 9:45 AM
+                'complete',             // Safe + worked required hours + clocked out after 8 PM
+                'late_complete',        // Late + worked required hours + clocked out after 8 PM
+                'early_complete',       // Safe + worked required hours + clocked out before 8 PM
+                'late_early_complete',  // Late + worked required hours + clocked out before 8 PM
+                'incomplete',           // Missing clock in/out or insufficient hours
+                'cross_day',            // Completed next day (forgot to clock out)
+                'absent'                // No attendance record
+            ])->default('incomplete');
             $table->text('notes')->nullable(); // Admin/HR notes
             $table->timestamps();
 
@@ -32,6 +42,7 @@ return new class extends Migration
             // Index for faster queries
             $table->index('date');
             $table->index(['user_id', 'date']);
+            $table->index('status');
         });
     }
 

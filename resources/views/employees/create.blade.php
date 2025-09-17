@@ -45,11 +45,14 @@
                                            class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" required>
                                 </div>
 
+                                <!-- Auto-generated Employee ID (Read-only) -->
                                 <div class="mb-4">
-                                    <label for="employee_id" class="block text-sm font-medium text-gray-700 mb-1">Employee ID *</label>
-                                    <input type="text" name="employee_id" id="employee_id" value="{{ old('employee_id') }}" 
-                                           placeholder="EMP001" 
-                                           class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" required>
+                                    <label for="employee_id_display" class="block text-sm font-medium text-gray-700 mb-1">Employee ID (Auto-generated)</label>
+                                    <input type="text" id="employee_id_display" 
+                                           value="{{ $nextEmployeeId }}" 
+                                           class="w-full border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-600 cursor-not-allowed" 
+                                           readonly disabled>
+                                    <p class="text-xs text-gray-500 mt-1">Employee ID will be automatically assigned: {{ $nextEmployeeId }}</p>
                                 </div>
 
                                 <div class="mb-4">
@@ -72,9 +75,18 @@
                                 
                                 <div class="mb-4">
                                     <label for="department" class="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                                    <input type="text" name="department" id="department" value="{{ old('department') }}" 
-                                           placeholder="e.g., Human Resources, IT, Operations" 
-                                           class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                    <select name="department" id="department" 
+                                            class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="">Select Department</option>
+                                        <option value="Human Resources" {{ old('department') == 'Human Resources' ? 'selected' : '' }}>Human Resources</option>
+                                        <option value="Information Technology" {{ old('department') == 'Information Technology' ? 'selected' : '' }}>Information Technology</option>
+                                        <option value="Operations" {{ old('department') == 'Operations' ? 'selected' : '' }}>Operations</option>
+                                        <option value="Finance" {{ old('department') == 'Finance' ? 'selected' : '' }}>Finance</option>
+                                        <option value="Marketing" {{ old('department') == 'Marketing' ? 'selected' : '' }}>Marketing</option>
+                                        <option value="Sales" {{ old('department') == 'Sales' ? 'selected' : '' }}>Sales</option>
+                                        <option value="Customer Service" {{ old('department') == 'Customer Service' ? 'selected' : '' }}>Customer Service</option>
+                                        <option value="Administration" {{ old('department') == 'Administration' ? 'selected' : '' }}>Administration</option>
+                                    </select>
                                 </div>
 
                                 <div class="mb-4">
@@ -86,7 +98,8 @@
 
                                 <div class="mb-4">
                                     <label for="hire_date" class="block text-sm font-medium text-gray-700 mb-1">Hire Date</label>
-                                    <input type="date" name="hire_date" id="hire_date" value="{{ old('hire_date') }}" 
+                                    <input type="date" name="hire_date" id="hire_date" 
+                                           value="{{ old('hire_date', date('Y-m-d')) }}" 
                                            class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                                 </div>
 
@@ -99,12 +112,34 @@
                             </div>
                         </div>
 
+                        <!-- Additional Information Section -->
+                        <div class="mt-8 pt-6 border-t border-gray-200">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Preview</h3>
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span class="font-medium text-blue-800">Next Employee ID:</span>
+                                        <span class="text-blue-600 font-bold">{{ $nextEmployeeId }}</span>
+                                    </div>
+                                    <div>
+                                        <span class="font-medium text-blue-800">Temporary Password:</span>
+                                        <span class="text-blue-600 font-mono">Will be auto-generated</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mt-8 pt-4 border-t border-gray-200">
                             <div class="bg-yellow-50 p-4 rounded-md mb-4">
                                 <p class="text-sm text-yellow-800">
-                                    <strong>Note:</strong> A temporary password will be generated for this employee. 
-                                    They will need to complete their profile and change their password on first login.
+                                    <strong>Important Notes:</strong>
                                 </p>
+                                <ul class="text-sm text-yellow-700 mt-2 list-disc list-inside space-y-1">
+                                    <li>Employee ID <strong>{{ $nextEmployeeId }}</strong> will be automatically assigned</li>
+                                    <li>A temporary password will be generated and displayed after creation</li>
+                                    <li>Employee will need to complete their profile on first login</li>
+                                    <li>Default employment status will be set to "Active"</li>
+                                </ul>
                             </div>
                             
                             <div class="flex justify-end space-x-3">

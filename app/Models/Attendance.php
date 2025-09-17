@@ -50,6 +50,117 @@ class Attendance extends Model
         return !is_null($this->clock_out_time);
     }
 
+    /**
+     * Check for incomplete attendance from yesterday and complete it
+     */
+    public static function handleCrossDayCompletion($userId, $clockOutTime, $clockOutPhoto, $location)
+    {
+        $yesterday = Carbon::yesterday();
+        
+        // Find incomplete attendance from yesterday
+        $incompleteAttendance = self::where('user_id', $userId)
+                                   ->where('date', $yesterday)
+                                   ->whereNotNull('clock_in_time')
+                                   ->whereNull('clock_out_time')
+                                   ->first();
+        
+        if ($incompleteAttendance) {
+            // Complete yesterday's attendance
+            $incompleteAttendance->clock_out_time = $clockOutTime;
+            $incompleteAttendance->clock_out_photo = $clockOutPhoto;
+            $incompleteAttendance->clock_out_location = $location;
+            $incompleteAttendance->status = 'cross_day';
+            $incompleteAttendance->notes = 'Completed on ' . Carbon::now()->format('Y-m-d H:i:s');
+            $incompleteAttendance->calculateTotalHours();
+            
+            return $incompleteAttendance;
+        }
+        
+        return null;
+    }
+
+    /**
+ * Enhanced status determination based on admin-configured deadlines
+ */
+public function determineStatus()
+{
+    if (!$this->clock_in_time) {
+        return 'incomplete';
+    }
+
+    $clockInTime = Carbon::createFromFormat('H:i:s', $this->clock_in_time);
+    
+    // Get user's configurable deadline (not hardcoded 9:45)
+    $userDeadline = $this->getUserClockInDeadline();
+    $safeTime = Carbon::createFromFormat('H:i:s', $userDeadline);
+    
+    // Get user's configurable end time
+    $userEndTime = $this->getUserPreferredEndTime();
+    $standardEndTime = Carbon::createFromFormat('H:i:s', $userEndTime);
+    
+    // Determine initial status based on admin-set deadline
+    if ($clockInTime->lte($safeTime)) {
+        $baseStatus = 'safe';
+    } else {
+        $baseStatus = 'late';
+    }
+    
+    // If clocked out, analyze completion
+    if ($this->hasCheckedOut()) {
+        $clockOutTime = Carbon::createFromFormat('H:i:s', $this->clock_out_time);
+        $userRequiredHours = $this->getUserRequiredHours();
+        
+        if ($this->total_hours >= $userRequiredHours) {
+            // Complete work day
+            if ($clockOutTime->gte($standardEndTime)) {
+                return $baseStatus === 'safe' ? 'complete' : 'late_complete';
+            } else {
+                return $baseStatus === 'safe' ? 'early_complete' : 'late_early_complete';
+            }
+        } else {
+            return 'incomplete';
+        }
+    }
+    
+    return $baseStatus;
+}
+
+/**
+ * Get user's configurable clock-in deadline
+ */
+private function getUserClockInDeadline()
+{
+    $userSetting = \DB::table('user_work_settings')
+                     ->where('user_id', $this->user_id)
+                     ->first();
+    
+    return $userSetting ? $userSetting->clock_in_deadline : '09:45:00';
+}
+
+/**
+ * Get user's preferred end time
+ */
+private function getUserPreferredEndTime()
+{
+    $userSetting = \DB::table('user_work_settings')
+                     ->where('user_id', $this->user_id)
+                     ->first();
+    
+    return $userSetting ? $userSetting->preferred_end_time : '18:00:00';
+}
+
+    /**
+     * Get user-specific required hours
+     */
+    private function getUserRequiredHours()
+    {
+        $userSetting = \DB::table('user_work_settings')
+                         ->where('user_id', $this->user_id)
+                         ->first();
+        
+        return $userSetting ? (float) $userSetting->required_hours_per_day : 8.0;
+    }
+
     // Calculate working hours when clocking out
     public function calculateTotalHours()
     {
@@ -58,7 +169,7 @@ class Attendance extends Model
             $clockInDateTime = Carbon::createFromFormat('Y-m-d H:i:s', $this->date->format('Y-m-d') . ' ' . $this->clock_in_time);
             $clockOutDateTime = Carbon::createFromFormat('Y-m-d H:i:s', $this->date->format('Y-m-d') . ' ' . $this->clock_out_time);
             
-            // Handle case where clock out is next day (night shift)
+            // Handle case where clock out is next day (cross-day scenario)
             if ($clockOutDateTime->lt($clockInDateTime)) {
                 $clockOutDateTime->addDay();
             }
@@ -72,22 +183,8 @@ class Attendance extends Model
             // Ensure positive hours
             $this->total_hours = max(0, $totalHours);
             
-            // Get company standard hours (default 9 hours)
-            $standardHours = $this->getStandardWorkHours();
-            
-            // Update status based on hours worked
-            if ($this->total_hours >= $standardHours) {
-                $this->status = 'present';
-            } elseif ($this->total_hours >= ($standardHours * 0.5)) {
-                $this->status = 'incomplete';
-            } else {
-                $this->status = 'absent';
-            }
-            
-            // Check if late
-            if ($this->isLate()) {
-                $this->status = $this->status === 'present' ? 'late' : $this->status;
-            }
+            // Update status based on new logic
+            $this->status = $this->determineStatus();
             
             $this->save();
         }
@@ -101,20 +198,16 @@ class Attendance extends Model
             ->where('key', 'total_work_hours')
             ->first();
             
-        return $companySetting ? (float) $companySetting->value : 9.00;
+        return $companySetting ? (float) $companySetting->value : 8.00;
     }
 
     // Get late penalty time from company settings
     private function getLatePenaltyTime()
     {
-        $companySetting = \DB::table('company_settings')
-            ->where('key', 'late_penalty_after')
-            ->first();
-            
-        return $companySetting ? $companySetting->value : '09:46:00';
+        return '09:45:00'; // Fixed based on your requirements
     }
 
-    // Determine if employee is late
+    // Determine if employee is late (after 9:45 AM)
     public function isLate()
     {
         if ($this->clock_in_time) {
@@ -134,16 +227,10 @@ class Attendance extends Model
             return 0;
         }
         
-        $standardHours = $this->getStandardWorkHours();
-        $overtimeThreshold = $this->getOvertimeThreshold();
+        $userRequiredHours = $this->getUserRequiredHours();
         
-        if ($this->total_hours > $standardHours) {
-            $overtimeMinutes = ($this->total_hours - $standardHours) * 60;
-            
-            // Only count as overtime if exceeds threshold (default 30 minutes)
-            if ($overtimeMinutes >= $overtimeThreshold) {
-                return round(($overtimeMinutes / 60), 2);
-            }
+        if ($this->total_hours > $userRequiredHours) {
+            return round(($this->total_hours - $userRequiredHours), 2);
         }
         
         return 0;
@@ -152,11 +239,7 @@ class Attendance extends Model
     // Get overtime threshold from company settings
     private function getOvertimeThreshold()
     {
-        $companySetting = \DB::table('company_settings')
-            ->where('key', 'ot_threshold_minutes')
-            ->first();
-            
-        return $companySetting ? (int) $companySetting->value : 30;
+        return 30; // 30 minutes threshold
     }
 
     // Scope for today's attendance
@@ -193,12 +276,19 @@ class Attendance extends Model
     public function getStatusColorAttribute()
     {
         switch ($this->status) {
-            case 'present':
+            case 'safe':
+            case 'complete':
                 return 'green';
             case 'late':
+            case 'late_complete':
+            case 'late_early_complete':
                 return 'yellow';
+            case 'early_complete':
+                return 'blue';
             case 'incomplete':
                 return 'orange';
+            case 'cross_day':
+                return 'purple';
             case 'absent':
                 return 'red';
             default:

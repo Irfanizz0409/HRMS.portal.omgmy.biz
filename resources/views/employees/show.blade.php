@@ -203,14 +203,50 @@
                                 <dd class="mt-1 text-sm text-gray-900">{{ $employee->created_at->format('d M Y, g:i A') }}</dd>
                             </div>
                             
-                            @if($employee->last_login)
+                            @if($employee->last_login_at)
                             <div>
                                 <dt class="text-sm font-medium text-gray-500">Last Login</dt>
-                                <dd class="mt-1 text-sm text-gray-900">{{ $employee->last_login->format('d M Y, g:i A') }}</dd>
+                                <dd class="mt-1 text-sm text-gray-900">{{ $employee->last_login_at->format('d M Y, g:i A') }}</dd>
                             </div>
                             @endif
                         </dl>
                     </div>
+
+                    <!-- Enhanced Session Information (Admin/HR only) -->
+                    @if(in_array(Auth::user()->role, ['admin', 'hr']))
+                    <div class="mt-8">
+                        <h3 class="text-lg font-medium text-gray-900 mb-4 border-b pb-2">Session & Security Information</h3>
+                        <dl class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            @if($employee->last_login_ip)
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Last Login IP</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ $employee->last_login_ip }}</dd>
+                            </div>
+                            @endif
+                            
+                            @if($employee->session_expires_at)
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Session Expires</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ $employee->session_expires_at->format('d M Y, g:i A') }}</dd>
+                            </div>
+                            @endif
+                            
+                            <div>
+                                <dt class="text-sm font-medium text-gray-500">Active Sessions</dt>
+                                <dd class="mt-1 text-sm text-gray-900">{{ $employee->active_sessions_count ?? 0 }}</dd>
+                            </div>
+                            
+                            @if($employee->trusted_devices)
+                            <div class="md:col-span-3">
+                                <dt class="text-sm font-medium text-gray-500">Trusted Devices</dt>
+                                <dd class="mt-1 text-sm text-gray-900">
+                                    {{ count($employee->trusted_devices) }} device(s) trusted
+                                </dd>
+                            </div>
+                            @endif
+                        </dl>
+                    </div>
+                    @endif
                 </div>
             </div>
         </div>

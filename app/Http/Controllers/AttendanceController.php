@@ -40,16 +40,10 @@ class AttendanceController extends Controller
         $user = Auth::user();
         $today = Carbon::today();
         
-        // Get or create today's attendance record
-        $attendance = Attendance::firstOrCreate(
-            [
-                'user_id' => $user->id,
-                'date' => $today
-            ],
-            [
-                'status' => 'incomplete'
-            ]
-        );
+        // Only GET existing attendance record, don't create
+        $attendance = Attendance::where('user_id', $user->id)
+                                ->where('date', $today)
+                                ->first();
         
         return view('attendance.clock', compact('attendance'));
     }
@@ -63,12 +57,18 @@ class AttendanceController extends Controller
         $today = Carbon::today();
         $now = Carbon::now();
         
-        // Check if already clocked in today
-        $attendance = Attendance::where('user_id', $user->id)
-                                ->where('date', $today)
-                                ->first();
-        
-        if ($attendance && $attendance->hasCheckedIn()) {
+        // Get or create attendance record only when actually clocking in
+        $attendance = Attendance::firstOrCreate(
+            [
+                'user_id' => $user->id,
+                'date' => $today
+            ],
+            [
+                'status' => 'incomplete'
+            ]
+        );
+
+        if ($attendance->hasCheckedIn()) {
             return response()->json([
                 'success' => false,
                 'message' => 'You have already clocked in today.'
@@ -84,24 +84,19 @@ class AttendanceController extends Controller
         // Process and save photo
         $photoPath = $this->saveBase64Image($request->photo, 'clock_in_' . $user->id . '_' . $today->format('Y-m-d'));
         
-        // Create or update attendance record
-        if (!$attendance) {
-            $attendance = new Attendance([
-                'user_id' => $user->id,
-                'date' => $today
-            ]);
-        }
-        
+        // Update attendance record
         $attendance->clock_in_time = $now->format('H:i:s');
         $attendance->clock_in_photo = $photoPath;
         $attendance->clock_in_location = $request->location;
         
-        // Determine if late (after 9:00 AM)
-        $standardTime = Carbon::parse('09:00:00');
-        if ($now->gt($standardTime)) {
-            $attendance->status = 'late';
+        // Determine status based on user's configurable deadline
+        $userSetting = \App\Models\UserWorkSetting::where('user_id', $user->id)->first();
+        $deadline = $userSetting ? $userSetting->clock_in_deadline : '09:45:00';
+        
+        if ($now->format('H:i:s') <= $deadline) {
+            $attendance->status = 'safe';
         } else {
-            $attendance->status = 'present';
+            $attendance->status = 'late';
         }
         
         $attendance->save();
@@ -115,7 +110,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Process clock out
+     * Enhanced clock out with cross-day completion logic
      */
     public function clockOut(Request $request)
     {
@@ -123,7 +118,35 @@ class AttendanceController extends Controller
         $today = Carbon::today();
         $now = Carbon::now();
         
-        // Get today's attendance record
+        // Validate photo
+        $request->validate([
+            'photo' => 'required|string',
+            'location' => 'nullable|string'
+        ]);
+        
+        $photoPath = $this->saveBase64Image($request->photo, 'clock_out_' . $user->id . '_' . $today->format('Y-m-d'));
+        
+        // Check for incomplete attendance from yesterday first
+        $crossDayCompletion = Attendance::handleCrossDayCompletion(
+            $user->id, 
+            $now->format('H:i:s'), 
+            $photoPath, 
+            $request->location
+        );
+        
+        if ($crossDayCompletion) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Yesterday\'s attendance completed successfully! Total hours: ' . $crossDayCompletion->total_hours,
+                'time' => $now->format('g:i A'),
+                'total_hours' => $crossDayCompletion->total_hours,
+                'status' => $crossDayCompletion->status,
+                'cross_day' => true,
+                'date_completed' => $crossDayCompletion->date->format('M d, Y')
+            ]);
+        }
+        
+        // Normal clock out logic for today
         $attendance = Attendance::where('user_id', $user->id)
                                 ->where('date', $today)
                                 ->first();
@@ -142,21 +165,10 @@ class AttendanceController extends Controller
             ]);
         }
         
-        // Validate photo
-        $request->validate([
-            'photo' => 'required|string', // Base64 image data
-            'location' => 'nullable|string'
-        ]);
-        
-        // Process and save photo
-        $photoPath = $this->saveBase64Image($request->photo, 'clock_out_' . $user->id . '_' . $today->format('Y-m-d'));
-        
         // Update attendance record
         $attendance->clock_out_time = $now->format('H:i:s');
         $attendance->clock_out_photo = $photoPath;
         $attendance->clock_out_location = $request->location;
-        
-        // Calculate total working hours
         $attendance->calculateTotalHours();
         
         return response()->json([
@@ -188,7 +200,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Admin/HR view all employee attendance
+     * Admin/HR view all employee attendance - Show ALL records by default
      */
     public function adminIndex(Request $request)
     {
@@ -199,15 +211,30 @@ class AttendanceController extends Controller
             abort(403, 'Unauthorized access.');
         }
         
-        $today = Carbon::today();
-        $query = Attendance::with('user')->where('date', $today);
+        $query = Attendance::with('user');
+        
+        // Filter by date if specified (optional now)
+        if ($request->filled('date')) {
+            $selectedDate = $request->get('date');
+            $date = Carbon::parse($selectedDate);
+            $query->where('date', $date);
+        } else {
+            $selectedDate = null; // No date filter = show all
+        }
         
         // Filter by employee if specified
         if ($request->filled('employee_id')) {
             $query->where('user_id', $request->employee_id);
         }
         
-        $attendances = $query->orderBy('clock_in_time', 'asc')->get();
+        // Filter by status if specified
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+        
+        $attendances = $query->orderBy('date', 'desc')
+                            ->orderBy('clock_in_time', 'asc')
+                            ->get();
         
         // Get employee list for filter
         $employees = \App\Models\User::where('employment_status', 'active')
@@ -215,7 +242,7 @@ class AttendanceController extends Controller
                                    ->orderBy('name')
                                    ->get();
         
-        return view('attendance.admin', compact('attendances', 'employees'));
+        return view('attendance.admin', compact('attendances', 'employees', 'selectedDate'));
     }
 
     /**
@@ -262,87 +289,86 @@ class AttendanceController extends Controller
         return Storage::disk('public')->response($path);
     }
 
+    /**
+     * Delete attendance record (Admin/HR only)
+     */
+    public function destroy(Attendance $attendance)
+    {
+        $user = Auth::user();
+        
+        // Check permissions
+        if (!in_array($user->role, ['admin', 'hr'])) {
+            abort(403, 'Unauthorized access.');
+        }
+        
+        // Delete associated photos if they exist
+        if ($attendance->clock_in_photo) {
+            Storage::disk('public')->delete($attendance->clock_in_photo);
+        }
+        
+        if ($attendance->clock_out_photo) {
+            Storage::disk('public')->delete($attendance->clock_out_photo);
+        }
+        
+        $attendance->delete();
+        
+        return redirect()->route('attendance.admin')
+            ->with('success', 'Attendance record deleted successfully.');
+    }
 
     /**
- * Delete attendance record (Admin/HR only)
- */
-public function destroy(Attendance $attendance)
-{
-    $user = Auth::user();
-    
-    // Check permissions
-    if (!in_array($user->role, ['admin', 'hr'])) {
-        abort(403, 'Unauthorized access.');
+     * Admin update attendance record
+     */
+    public function adminUpdate(Request $request, Attendance $attendance)
+    {
+        $user = Auth::user();
+        
+        // Check permissions
+        if (!in_array($user->role, ['admin', 'hr'])) {
+            abort(403, 'Unauthorized access.');
+        }
+        
+        // Validate input
+        $request->validate([
+            'clock_in_time' => 'nullable|date_format:H:i',
+            'clock_out_time' => 'nullable|date_format:H:i',
+            'status' => 'required|in:safe,late,complete,late_complete,early_complete,late_early_complete,incomplete,cross_day,absent',
+            'notes' => 'nullable|string|max:500'
+        ]);
+        
+        // Update attendance record
+        $attendance->update([
+            'clock_in_time' => $request->clock_in_time,
+            'clock_out_time' => $request->clock_out_time,
+            'status' => $request->status,
+            'notes' => $request->notes
+        ]);
+        
+        // Recalculate total hours if both times are present
+        if ($attendance->clock_in_time && $attendance->clock_out_time) {
+            $attendance->calculateTotalHours();
+        }
+        
+        return redirect()->route('attendance.admin')
+                        ->with('success', 'Attendance record updated successfully.');
     }
-    
-    // Delete associated photos if they exist
-    if ($attendance->clock_in_photo) {
-        Storage::disk('public')->delete($attendance->clock_in_photo);
-    }
-    
-    if ($attendance->clock_out_photo) {
-        Storage::disk('public')->delete($attendance->clock_out_photo);
-    }
-    
-    $attendance->delete();
-    
-    return redirect()->route('attendance.admin')
-        ->with('success', 'Attendance record deleted successfully.');
-}
 
-/**
- * Admin update attendance record
- */
-public function adminUpdate(Request $request, Attendance $attendance)
-{
-    $user = Auth::user();
-    
-    // Check permissions
-    if (!in_array($user->role, ['admin', 'hr'])) {
-        abort(403, 'Unauthorized access.');
+    /**
+     * Get attendance photos for display
+     */
+    public function getPhotos(Attendance $attendance)
+    {
+        $user = Auth::user();
+        
+        // Check permissions - admin/hr can view all, employees can view their own
+        if (!in_array($user->role, ['admin', 'hr']) && $attendance->user_id !== $user->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized']);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'clock_in_photo' => $attendance->clock_in_photo,
+            'clock_out_photo' => $attendance->clock_out_photo,
+        ]);
     }
-    
-    // Validate input
-    $request->validate([
-        'clock_in_time' => 'nullable|date_format:H:i',
-        'clock_out_time' => 'nullable|date_format:H:i',
-        'status' => 'required|in:present,late,absent,incomplete',
-        'notes' => 'nullable|string|max:500'
-    ]);
-    
-    // Update attendance record
-    $attendance->update([
-        'clock_in_time' => $request->clock_in_time,
-        'clock_out_time' => $request->clock_out_time,
-        'status' => $request->status,
-        'notes' => $request->notes
-    ]);
-    
-    // Recalculate total hours if both times are present
-    if ($attendance->clock_in_time && $attendance->clock_out_time) {
-        $attendance->calculateTotalHours();
-    }
-    
-    return redirect()->route('attendance.admin')
-                    ->with('success', 'Attendance record updated successfully.');
-}
-
-/**
- * Get attendance photos for display
- */
-public function getPhotos(Attendance $attendance)
-{
-    $user = Auth::user();
-    
-    // Check permissions - admin/hr can view all, employees can view their own
-    if (!in_array($user->role, ['admin', 'hr']) && $attendance->user_id !== $user->id) {
-        return response()->json(['success' => false, 'message' => 'Unauthorized']);
-    }
-    
-    return response()->json([
-        'success' => true,
-        'clock_in_photo' => $attendance->clock_in_photo,
-        'clock_out_photo' => $attendance->clock_out_photo,
-    ]);
-}
 }

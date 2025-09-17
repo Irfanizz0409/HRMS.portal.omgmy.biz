@@ -26,15 +26,33 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the number of minutes that you wish the session
-    | to be allowed to remain idle before it expires. If you want them
-    | to expire immediately when the browser is closed then you may
-    | indicate that via the expire_on_close configuration option.
+    | to be allowed to remain idle before it expires. For HRMS, we use
+    | extended sessions to allow employees to stay logged in longer.
+    |
+    | Default: 43200 minutes (30 days)
     |
     */
 
-    'lifetime' => (int) env('SESSION_LIFETIME', 120),
+    'lifetime' => (int) env('SESSION_LIFETIME', 43200),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Role-based Session Duration
+    |--------------------------------------------------------------------------
+    |
+    | Different session lengths based on user roles for security
+    |
+    */
+
+    'role_lifetime' => [
+        'admin' => (int) env('ADMIN_SESSION_LIFETIME', 480),        // 8 hours
+        'hr' => (int) env('HR_SESSION_LIFETIME', 720),              // 12 hours  
+        'staff' => (int) env('STAFF_SESSION_LIFETIME', 43200),      // 30 days
+        'intern' => (int) env('INTERN_SESSION_LIFETIME', 43200),    // 30 days
+        'part_time' => (int) env('PARTTIME_SESSION_LIFETIME', 43200), // 30 days
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -129,7 +147,7 @@ return [
 
     'cookie' => env(
         'SESSION_COOKIE',
-        Str::slug(env('APP_NAME', 'laravel')).'-session'
+        Str::slug(env('APP_NAME', 'laravel')).'-hrms-session'
     ),
 
     /*
@@ -169,7 +187,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    'secure' => env('SESSION_SECURE_COOKIE', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -213,5 +231,17 @@ return [
     */
 
     'partitioned' => env('SESSION_PARTITIONED_COOKIE', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Remember Token Duration
+    |--------------------------------------------------------------------------
+    |
+    | Duration in minutes for "Remember Me" functionality.
+    | Default: 40320 minutes (28 days)
+    |
+    */
+
+    'remember_duration' => (int) env('AUTH_REMEMBER_DURATION', 40320),
 
 ];

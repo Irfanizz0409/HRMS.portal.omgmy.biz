@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Attendance;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Carbon\Carbon;
 
 class EmployeeController extends Controller
 {
@@ -245,5 +247,29 @@ class EmployeeController extends Controller
     {
         $employee = Auth::user();
         return view('employees.show', compact('employee'));
+    }
+
+    /**
+     * View employee's personal attendance records (Admin/HR only)
+     */
+    public function attendanceHistory(User $employee, Request $request)
+    {
+        $user = Auth::user();
+        
+        // Check permissions - only admin/HR can view other employees' records
+        if (!in_array($user->role, ['admin', 'hr'])) {
+            abort(403, 'Unauthorized access.');
+        }
+        
+        // Date range filter
+        $startDate = $request->get('start_date', Carbon::now()->startOfMonth()->format('Y-m-d'));
+        $endDate = $request->get('end_date', Carbon::now()->endOfMonth()->format('Y-m-d'));
+        
+        $attendances = Attendance::where('user_id', $employee->id)
+                                ->dateRange($startDate, $endDate)
+                                ->orderBy('date', 'desc')
+                                ->paginate(15);
+        
+        return view('admin.employee-attendance', compact('employee', 'attendances', 'startDate', 'endDate'));
     }
 }
